@@ -1,0 +1,83 @@
+---
+title: "MLearning"
+author: "Minh Le"
+date: "1/19/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Library
+```{r}
+library(caret)
+library(kernlab)
+library(randomForest)
+```
+
+## Load data set
+```{r}
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+
+```
+
+## Clean and manipulate data through removing unnecessary variables and null values
+```{r}
+set.seed(123123)
+training$classe <- as.factor(training$classe)
+training <- training[, 8:dim(training)[2]]
+training[training == ""] <- NA
+
+csum <- colSums(is.na(training)) == 0
+filter_col <- names(csum[csum == TRUE])
+new_train <- training[, filter_col]
+```
+
+
+## Create two parts of data set to test in training set
+```{r}
+inTrain <- createDataPartition(y = new_train$classe, p = 0.75, list = FALSE)
+
+training_spt <- new_train[inTrain, ]
+crs_valid <- new_train[-inTrain,]
+```
+
+## Use random forest to model and make prediction
+```{r}
+rf.model <- randomForest(classe ~., data = training_spt, importance = TRUE, ntrees = 10)
+rf_valid <- predict(rf.model, crs_valid)
+
+confusionMatrix(rf_valid, crs_valid$classe)
+```
+
+## Use gradient boosting
+```{r}
+controlGBM <- trainControl(method="repeatedcv", number=3, verboseIter=FALSE) #cross validation
+gbm.model <- train(classe ~ ., data = training_spt, method = "gbm", verbose = FALSE, trControl = controlGBM)
+gbm_valid <- predict(gbm.model, crs_valid)
+confusionMatrix(gbm_valid, crs_valid$classe)
+```
+
+## Combine two models
+```{r}
+predDF <- data.frame(rf_valid, gbm_valid, classe = crs_valid$classe)
+comb_model <- train(classe ~ ., method = "gam", preProcess= 'pca', data = predDF)
+comb_pred <- predict(comb_model, predDF)
+confusionMatrix(comb_pred, predDF$classe)
+```
+
+We find that using random forest give the highest accuracy (99.4%), hence we will use random forest model for testing. data. 
+It gives unbiased estimate of the sample of error rate (99.2%) 
+## Make predictions on testing data
+```{r}
+testing <- testing[, 8:dim(testing)[2]]
+csum_test <- colSums(is.na(testing)) == 0
+filter_test <- names(csum_test[csum_test] == 0)
+testing <- testing[, filter_test]
+testing$classe <- NA
+pred_test <- predict(rf.model, testing)
+pred_test
+```
+
